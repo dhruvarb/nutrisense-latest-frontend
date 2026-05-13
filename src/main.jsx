@@ -79,6 +79,17 @@ function App() {
   const [sessionUser, setSessionUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  const calorieGoal = useMemo(() => {
+    const bmr = 10 * Number(user.weight || 68) + 6.25 * Number(user.height || 170) - 5 * Number(user.age || 28) + 5;
+    const multiplier = {
+      sedentary: 1.2,
+      lightlyActive: 1.375,
+      moderatelyActive: 1.55,
+      veryActive: 1.725,
+    }[user.activityLevel] || 1.2;
+    return Math.round(bmr * multiplier);
+  }, [user]);
+
   React.useEffect(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       console.warn('Supabase URL or Key missing.');
@@ -132,16 +143,7 @@ function App() {
     return <AuthScreen onAuthSuccess={setSessionUser} />;
   }
 
-  const calorieGoal = useMemo(() => {
-    const bmr = 10 * Number(user.weight || 68) + 6.25 * Number(user.height || 170) - 5 * Number(user.age || 28) + 5;
-    const multiplier = {
-      sedentary: 1.2,
-      lightlyActive: 1.375,
-      moderatelyActive: 1.55,
-      veryActive: 1.725,
-    }[user.activityLevel] || 1.2;
-    return Math.round(bmr * multiplier);
-  }, [user]);
+
 
   return (
     <div className="app-shell">
