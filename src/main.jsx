@@ -26,8 +26,13 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+import { createClient } from '@supabase/supabase-js';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const defaultUser = {
   id: '',
   name: 'Healthy User',
@@ -66,6 +71,51 @@ function App() {
   const [user, setUser] = useState(defaultUser);
   const [healthData, setHealthData] = useState(null);
   const [mealLog, setMealLog] = useState([]);
+  
+  const [sessionUser, setSessionUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  React.useEffect(() => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.warn('Supabase URL or Key missing. Bypassing auth for demo/local.');
+      setAuthChecked(true);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSessionUser(session?.user || null);
+      setAuthChecked(true);
+      if (session?.user) loadUserProfile(session.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user || null);
+      if (session?.user) loadUserProfile(session.user.id);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function loadUserProfile(userId) {
+    try {
+      const payload = await requestJson(`/user/${userId}`);
+      if (payload.data) {
+        setUser({ ...defaultUser, ...payload.data, id: userId });
+      } else {
+        setUser({ ...defaultUser, id: userId });
+      }
+    } catch (e) {
+      setUser({ ...defaultUser, id: userId });
+    }
+  }
+
+  if (!authChecked) {
+    return <div className="app-shell" style={{ display: 'grid', placeItems: 'center' }}><Loader2 className="spin" size={40} /></div>;
+  }
+
+  if (SUPABASE_URL && SUPABASE_ANON_KEY && !sessionUser) {
+    return <AuthScreen onAuthSuccess={setSessionUser} />;
+  }
 
   const calorieGoal = useMemo(() => {
     const bmr = 10 * Number(user.weight || 68) + 6.25 * Number(user.height || 170) - 5 * Number(user.age || 28) + 5;
@@ -117,6 +167,69 @@ function App() {
           <ChatScreen user={user} />
         </Dialog>
       )}
+    </div>
+  );
+}
+
+function AuthScreen({ onAuthSuccess }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        onAuthSuccess(data.user);
+      } else {
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        if (data.session) {
+          onAuthSuccess(data.user);
+        } else {
+          setError('Sign up successful! Please check your email to confirm.');
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-card">
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '2rem' }}>
+          <span className="brand-mark"><Apple size={32} /></span>
+          <div>
+            <strong>NutriSense</strong>
+            <small>Clinical nutrition</small>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="flow" style={{ padding: 0 }}>
+          <Field label="Email" type="email" value={email} onChange={setEmail} />
+          <Field label="Password" type="password" value={password} onChange={setPassword} />
+          <button type="submit" className="primary-button" disabled={loading} style={{ marginTop: '8px' }}>
+            {loading ? <Loader2 className="spin" size={18} /> : (isLogin ? 'Login' : 'Sign Up')}
+          </button>
+        </form>
+        {error && <p className="error-box" style={{ marginTop: '1rem' }}>{error}</p>}
+        <button 
+          className="text-button" 
+          onClick={() => { setIsLogin(!isLogin); setError(''); }} 
+          style={{ marginTop: '1rem', width: '100%', background: 'transparent', border: 'none', color: 'var(--blue)', fontWeight: 600, cursor: 'pointer' }}
+        >
+          {isLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -487,7 +600,15 @@ function ProfileScreen({ user, setUser }) {
       <button className="primary-button" onClick={saveProfile}><CheckCircle2 size={18} />Save Profile</button>
       {status && <p className="muted">{status}</p>}
       {error && <pre className="error-box">{error}</pre>}
-      <button className="danger-button" type="button"><LogOut size={18} />Logout</button>
+      <button 
+        className="danger-button" 
+        type="button" 
+        onClick={async () => {
+          if (SUPABASE_URL && SUPABASE_ANON_KEY) await supabase.auth.signOut();
+        }}
+      >
+        <LogOut size={18} />Logout
+      </button>
     </section>
   );
 }
