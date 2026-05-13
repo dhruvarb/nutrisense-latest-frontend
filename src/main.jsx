@@ -32,7 +32,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Provide dummy values to prevent createClient from throwing a fatal synchronous error
+const supabase = createClient(
+  SUPABASE_URL || 'https://missing-project.supabase.co', 
+  SUPABASE_ANON_KEY || 'missing-key'
+);
 const defaultUser = {
   id: '',
   name: 'Healthy User',
@@ -77,7 +81,7 @@ function App() {
 
   React.useEffect(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.warn('Supabase URL or Key missing. Bypassing auth for demo/local.');
+      console.warn('Supabase URL or Key missing.');
       setAuthChecked(true);
       return;
     }
@@ -113,7 +117,18 @@ function App() {
     return <div className="app-shell" style={{ display: 'grid', placeItems: 'center' }}><Loader2 className="spin" size={40} /></div>;
   }
 
-  if (SUPABASE_URL && SUPABASE_ANON_KEY && !sessionUser) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card" style={{ textAlign: 'center' }}>
+          <h2 style={{ color: 'var(--red)', marginBottom: '10px' }}>Configuration Error</h2>
+          <p>Please add <strong>VITE_SUPABASE_URL</strong> and <strong>VITE_SUPABASE_ANON_KEY</strong> to your Vercel Environment Variables and redeploy.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!sessionUser) {
     return <AuthScreen onAuthSuccess={setSessionUser} />;
   }
 
